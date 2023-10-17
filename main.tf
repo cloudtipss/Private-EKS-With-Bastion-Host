@@ -62,13 +62,19 @@ resource "tls_private_key" "ssh_key" {
 
 resource "local_file" "private_key" {
     content  = tls_private_key.ssh_key.private_key_pem
-    filename = "${var.path}/bastion_key.pem"
+    filename = "${var.path}/${var.private_key_name}"
     file_permission = "0600"
 }
 
 resource "aws_key_pair" "public_key" {
   key_name   = "public_bastion_key"
   public_key = tls_private_key.ssh_key.public_key_openssh
+}
+
+resource "aws_iam_instance_profile" "this" {
+    name = "instance_profile"
+    role = aws_iam_role.role.id 
+    
 }
 
 module "ec2-instance" {
@@ -104,7 +110,7 @@ module "ec2-instance" {
   chmod +x ./aws-iam-authenticator
   mkdir -p $HOME/bin && cp ./aws-iam-authenticator $HOME/bin/aws-iam-authenticator && export PATH=$PATH:$HOME/bin
   echo 'export PATH=$PATH:$HOME/bin' >> ~/.bashrc
-  aws-iam-authenticator help
+
 
   # Update Kubectl
   aws eks update-kubeconfig --name ${local.cluster_name}"
@@ -112,12 +118,11 @@ EOF
   key_name = aws_key_pair.public_key.key_name
   vpc_security_group_ids = [aws_security_group.ssh.id]
   iam_instance_profile = aws_iam_instance_profile.this.id
+
+  depends_on = [ aws_iam_instance_profile.this,aws_iam_role.role ]
 }
 
-resource "aws_iam_instance_profile" "this" {
-    name = "instance_profile"
-    role = aws_iam_role.role.id 
-}
+
 
 resource "aws_iam_role" "role" {
   name               = "testrole"
@@ -138,7 +143,7 @@ resource "aws_iam_role" "role" {
       "Sid": "",
       "Effect": "Allow",
       "Principal": {
-        "AWS": "arn:aws:sts::803253357612:assumed-role/testrole/i-0eb1ff0fbaf51f846"
+        "AWS": "*"
       },
       "Action": "sts:AssumeRole"
     }
@@ -169,12 +174,13 @@ resource "aws_iam_role_policy" "this" {
 EOF
 }
 
-data "http" "ip" {
-  url = "https://ifconfig.me/ip"
+
+data "external" "current_ipv4" {
+  program = ["bash","-c","curl ipinfo.io"]
 }
 
-output "ip" {
-  value = data.http.ip.response_body
+output "current_ipv4_json" {
+  value = data.external.current_ipv4.result["ip"]
 }
 
 
@@ -189,7 +195,7 @@ module "eks" {
   subnet_ids                     = module.vpc.private_subnets
   cluster_endpoint_public_access = true
   cluster_endpoint_private_access = true
-  cluster_endpoint_public_access_cidrs = ["${module.ec2-instance.public_ip}/32", "${data.http.ip.response_body}/32"]
+  cluster_endpoint_public_access_cidrs = ["${module.ec2-instance.public_ip}/32", "${data.external.current_ipv4.result["ip"]}/32"]
 
   eks_managed_node_group_defaults = {
     ami_type = var.ami_type
@@ -278,3 +284,7 @@ module "eks" {
 #   ]
 # }
 
+output "Connect_to_instance" {
+  description = "The public IP address assigned to the instance"
+  value       = "ssh -i ${var.path}/${var.private_key_name} ec2-user@${module.ec2-instance.public_ip}"
+}

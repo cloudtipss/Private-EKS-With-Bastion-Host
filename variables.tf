@@ -55,8 +55,16 @@ variable "ami_type" {
   default     = "AL2_x86_64"
 }
 
+
+variable "private_key_name" {
+  description = "Full path to you ssh folder"
+  type        = string
+  default     = "bastion_key.pem"
+}
+
+
 variable "path" {
   description = "Full path to you ssh folder"
   type        = string
-  default     = "/Users/mykhailozhuravel/.ssh"
+  default     = "ssh"
 }
