@@ -17,11 +17,6 @@ data "aws_eks_cluster_auth" "this" {
   ]
 }
 
-output "jhfhjf" {
-  description = "The public IP address assigned to the instance"
-  value       = data.aws_eks_cluster.this.endpoint
-}
-
 provider "kubernetes" {
   host                   = data.aws_eks_cluster.this.endpoint
   token                  = data.aws_eks_cluster_auth.this.token
